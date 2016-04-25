@@ -1,11 +1,11 @@
 
 
-send(register) => [$server]
+send(register) => [$server.addr]
     REGISTER sip:[$server.ip] SIP/2.0
-    Via: SIP/2.0/UDP [$local.ip]:[$local.port];branch=z9hG4bK-[$tag]
-    To: <sip:1024@[$server.ip]:[$server.port]>
-    From: <sip:1024@[$server.ip]:[$server.port]>;tag=1
-    Contact: <sip:1024@[$local.ip]:[$local.port]>;transport=UDP
+    Via: SIP/2.0/UDP [$local.addr];branch=z9hG4bK-[$tag]
+    To: <sip:1024@[$server.addr]>
+    From: <sip:1024@[$server.addr]>;tag=1
+    Contact: <sip:1024@[$local.addr]>;transport=UDP
     Expires: 3600
     User-agent: sipt-ua
     Call-ID: [$tag]@[$local.ip]

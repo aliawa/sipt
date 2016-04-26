@@ -98,7 +98,9 @@ def main(args):
     while True:
         hdlr.execute()
         if not loop:
-            break
+            resp = raw_input('Continue y/n:')
+            if resp == 'n':
+                break
 
 
 if __name__ == "__main__":

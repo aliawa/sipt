@@ -12,6 +12,7 @@ def parseargs():
     parser.add_argument('--sport', help='source port for sending', type=int, default=0  )
     parser.add_argument('--sf',    help='scenario',                required='True')
     parser.add_argument('-d',      help='destination IP and port')     
+    parser.add_argument('--hp',    help='hide port if it is 5060', type=bool, default=False)
     return parser.parse_args()
 
 
@@ -77,20 +78,21 @@ def loadScenario(scen_name):
 
 def main(args):
 
-    ServerAddr = IPAddr(args.i, args.p)
-    ClientAddr = IPAddr(args.i, args.sport)
+    ver = 6 if re.search('^[a-f0-9:]+$', args.i) else 4
+    ServerAddr = IPAddr(args.i, args.p, ver)
+    ClientAddr = IPAddr(args.i, args.sport, ver)
     scenario = loadScenario(args.sf)
 
-    context = {}
     if args.d:
-        context['remote'] = IPAddr.from_string(args.d)
+        g_context['remote'] = IPAddr.from_string(args.d)
+    g_context['hidePort'] = args.hp
 
     
     loop = False
     if scenario[0]['action'] == Handler.RECV:
         loop = True
     
-    hdlr = Handler(scenario, ServerAddr, ClientAddr, context)
+    hdlr = Handler(scenario, ServerAddr, ClientAddr)
     while True:
         hdlr.execute()
         if not loop:

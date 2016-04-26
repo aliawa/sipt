@@ -1,5 +1,5 @@
 from collections import namedtuple
-from ipaddress import ip_address
+#from ipaddress import ip_address
 import socket
 import string
 import random
@@ -10,40 +10,51 @@ import re
 # remote.ip  remote.port  remote.addr
 # <msg>.<header>
 
+g_context = {}
 
 
 class IPAddr:
-    def __init__(self, ip, port):
-        self.ip = ip_address(ip)
+    def __init__(self, ip, port, ver):
+        self.ip = ip
         self.port = port
+        self.version = ver
 
     @classmethod
     def from_string(cls, ipstr):
-        ip, separator, port = ipstr.rpartition(':')
-        assert separator # separator (`:`) must be present
-        port = int(port) # convert to integer
-        ip = ip_address(unicode(ip.strip("[]"))) # convert to `IPv4Address` or `IPv6Address` 
-        return cls(ip, port)
+        ipv4 = re.compile('(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?:\s*:\s*(\d{1,5}))?')
+        ipv6 = re.compile('\[?([:0-9a-f]+)\]?(?:\s*:\s*([0-9]{1,5}))?')
+        ip = ''
+        port = 0
+        ver = 0
+        m = ipv4.match(ipstr)
+        if m:
+            ip = m.group(1)
+            port = int(m.group(2)) if m.group(2) else 0
+            ver = 4
+        else:
+            m = ipv6.match(ipstr)
+            if m:
+                ip = m.group(1)
+                port = int(m.group(2)) if m.group(2) else 0
+                ver = 6
+        return cls(ip, port, ver)
 
     def get_ip(self):
         return self.ip
     def get_version(self):
-        return self.ip.version
+        return self.version
     def get_port(self):
         return self.port
     def get_addr(self):
-        return (str(self.ip), self.port)
+        return (self.ip, self.port)
     def __repr__(self):
-        if self.port != 5060:
-            if self.ip.version == 6:
-                strAddr = "[{0}]:{1}".format(str(self.ip), str(self.port))
+        if g_context['hidePort'] == False or self.port != 5060:
+            if self.version == 6:
+                return "[{0}]:{1}".format(self.ip, str(self.port))
             else:
-                strAddr = "{0}:{1}".format(str(self.ip), str(self.port))
-            return strAddr
-        else:
-            return str(self.ip)
-
-    
+                return "{0}:{1}".format(self.ip, str(self.port))
+        return self.ip
+        
 
 
 
@@ -56,11 +67,10 @@ class Handler:
     # Destinations
     NODST  = 0
 
-    def __init__(self, scenario, srvr_addr, clnt_addr, contxt):
+    def __init__(self, scenario, srvr_addr, clnt_addr):
         self.scenario = scenario
         self.srvr_addr = srvr_addr
         self.clnt_addr = clnt_addr
-        self.contxt = contxt
         
         self.messages = {}
         self.srvr_sock = self.getSock(srvr_addr.get_addr(), 
@@ -112,11 +122,11 @@ class Handler:
 
         elif var_seq[0] == 'server':
             if var_seq[1] == 'ip':
-                return self.contxt['remote'].get_ip()
+                return g_context['remote'].get_ip()
             elif var_seq[1] == 'port':
-                return self.contxt['remote'].get_port()
+                return g_context['remote'].get_port()
             elif var_seq[1] == 'addr':
-                return self.contxt['remote']
+                return g_context['remote']
 
         elif var_seq[0] == 'tag':
             return self.tagval
@@ -126,7 +136,7 @@ class Handler:
                 # The entire header
                 return self.messages[var_seq[0]][var_seq[1]]
             else:
-                return msg_getValue(var_seq[1], 
+                return self.msg_getValue(var_seq[1], 
                         self.messages[var_seq[0]][var_seq[1]], var_seq[2:])
         else:
             print "unknown variable", var
@@ -163,17 +173,21 @@ class Handler:
 
     def send(self, data, dest):
         if dest == '': # dest not given -> use remote
-            addr = self.context['remote']
+            addr = self.getValue('server.addr')
         elif dest[0] == '$':
             addr = self.getValue(dest[1:])
         else:
             addr = IPAddr.from_string(dest)
 
-        print "sending to", str(addr)
+        msg_dst = addr.get_addr()
+        if msg_dst[1] == 0:
+            msg_dst[1] = 5060
+
+        print "sending to", msg_dst
         req = self.populate(data)
         print req
 
-        self.clnt_sock.sendto(req, addr.get_addr());
+        self.clnt_sock.sendto(req, msg_dst);
         return req
 
 

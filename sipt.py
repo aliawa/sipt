@@ -76,15 +76,14 @@ def loadScenario(scen_name):
 
 
 def main(args):
-    addr = ip_address(args.i)
 
-    ServerAddr = IPAddr(addr=(str(addr), int(args.p)),     version=addr.version)
-    ClientAddr = IPAddr(addr=(str(addr), int(args.sport)), version=addr.version)
+    ServerAddr = IPAddr(args.i, args.p)
+    ClientAddr = IPAddr(args.i, args.sport)
     scenario = loadScenario(args.sf)
 
     context = {}
     if args.d:
-        context['remote'] = parseIP(args.d)
+        context['remote'] = IPAddr.from_string(args.d)
 
     
     loop = False

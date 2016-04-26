@@ -11,26 +11,40 @@ import re
 # <msg>.<header>
 
 
-IPAddr = namedtuple("IPAddr", "addr version")
 
-def addr_to_str(ipaddr, bPort):
-    if bPort and ipaddr.addr[1] != 5060:
-        if addr.version == 6:
-            strAddr = "[{1}]:{2}".format(ipaddr.addr[0], ipaddr.addr[1])
+class IPAddr:
+    def __init__(self, ip, port):
+        self.ip = ip_address(ip)
+        self.port = port
+
+    @classmethod
+    def from_string(cls, ipstr):
+        ip, separator, port = ipstr.rpartition(':')
+        assert separator # separator (`:`) must be present
+        port = int(port) # convert to integer
+        ip = ip_address(unicode(ip.strip("[]"))) # convert to `IPv4Address` or `IPv6Address` 
+        return cls(ip, port)
+
+    def get_ip(self):
+        return self.ip
+    def get_version(self):
+        return self.ip.version
+    def get_port(self):
+        return self.port
+    def get_addr(self):
+        return (str(self.ip), self.port)
+    def __repr__(self):
+        if self.port != 5060:
+            if self.ip.version == 6:
+                strAddr = "[{0}]:{1}".format(str(self.ip), str(self.port))
+            else:
+                strAddr = "{0}:{1}".format(str(self.ip), str(self.port))
+            return strAddr
         else:
-            strAddr = "{1}:{2}".format(ipaddr.addr[0], ipaddr.addr[1])
-        return strAddr
-    else:
-        return ipaddr.addr[0]
+            return str(self.ip)
 
+    
 
-def parseIP(ipstr):
-    ip, separator, port = ipstr.rpartition(':')
-    print "ip=",ip, "port=",port, "separator=",separator
-    assert separator # separator (`:`) must be present
-    port = int(port) # convert to integer
-    ip = ip_address(unicode(ip.strip("[]"))) # convert to `IPv4Address` or `IPv6Address` 
-    return IPAddr(addr=(str(ip), port), version=ip.version)
 
 
 class Handler:
@@ -49,12 +63,14 @@ class Handler:
         self.contxt = contxt
         
         self.messages = {}
-        self.srvr_sock = self.getSock(srvr_addr[0], srvr_addr.version, "UDP")
-        self.clnt_sock = self.getSock(clnt_addr[0], clnt_addr.version, "UDP")
+        self.srvr_sock = self.getSock(srvr_addr.get_addr(), 
+                srvr_addr.get_version(), "UDP")
+        self.clnt_sock = self.getSock(clnt_addr.get_addr(), 
+                clnt_addr.get_version(), "UDP")
         self.tagval = str(random.randint(1111,9999))
 
-        print "Listning on : {0}:{1}".format( srvr_addr.addr[0], srvr_addr.addr[1])
-        print "Sending from: {0}:{1}".format( clnt_addr.addr[0], clnt_addr.addr[1])
+        print "Listning on : ", srvr_addr
+        print "Sending from: ", clnt_addr
         print
 
 
@@ -76,33 +92,31 @@ class Handler:
         return sock
 
 
-
-    def msg_getValueStr(self, name, val, var):
+    def msg_getValue(self, name, val, var):
         if name == 'via':
             l = re.split('\s|;', val)
             if var[0] == 'addr':
-                return addr_to_str(parseIP(l[1]),True)
-        return ''
+                return IPAddr.from_string(l[1])
 
 
 
-    def getValueStr(self, var):
+    def getValue(self, var):
         var_seq = string.split(var, '.')
         if var_seq[0] == 'local':
             if var_seq[1] == 'ip':
-                return self.srvr_addr.addr[0]
+                return self.srvr_addr.get_ip()
             elif var_seq[1] == 'port':
-                return str(self.srvr_addr.addr[1])
+                return self.srvr_addr.get_port()
             elif var_seq[1] == 'addr':
-                return addr_to_str(self.srvr_addr, True)
+                return self.srvr_addr
 
         elif var_seq[0] == 'server':
             if var_seq[1] == 'ip':
-                return self.contxt['remote'].addr[0]
+                return self.contxt['remote'].get_ip()
             elif var_seq[1] == 'port':
-                return str(self.contxt['remote'].addr[1])
+                return self.contxt['remote'].get_port()
             elif var_seq[1] == 'addr':
-                return addr_to_str(self.contxt['remote'] ,True)
+                return self.contxt['remote']
 
         elif var_seq[0] == 'tag':
             return self.tagval
@@ -112,7 +126,7 @@ class Handler:
                 # The entire header
                 return self.messages[var_seq[0]][var_seq[1]]
             else:
-                return msg_getValueStr(var_seq[1], 
+                return msg_getValue(var_seq[1], 
                         self.messages[var_seq[0]][var_seq[1]], var_seq[2:])
         else:
             print "unknown variable", var
@@ -120,20 +134,12 @@ class Handler:
 
 
 
-    def getValue(self, var):
-        var_seq = string.split(var, '.')
 
-        if var_seq[0] == 'server':
-            if var_seq[1] == 'addr':
-                return self.contxt['remote'].addr
-
-
-
-    def populate(self, msg, dst):
+    def populate(self, msg):
         msg_lst = re.split('\[|\]', msg)
         for i, item in enumerate(msg_lst):
             if item[0] == '$':
-                msg_lst[i] = self.getValueStr(item[1:])
+                msg_lst[i] = str(self.getValue(item[1:]))
         return ''.join(msg_lst)
 
 
@@ -161,13 +167,13 @@ class Handler:
         elif dest[0] == '$':
             addr = self.getValue(dest[1:])
         else:
-            addr = parseIP(dest).addr
+            addr = IPAddr.from_string(dest)
 
-        print "sending to", addr
-        req = self.populate(data, addr)
+        print "sending to", str(addr)
+        req = self.populate(data)
         print req
 
-        self.clnt_sock.sendto(req, addr);
+        self.clnt_sock.sendto(req, addr.get_addr());
         return req
 
 

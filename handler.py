@@ -204,6 +204,12 @@ class Handler:
         for a in self.scenario:
             if a['action'] == self.SEND:
                 print "executing send:"
+
+                if g_context['step']:
+                    b = raw_input('b = break; any = continue')
+                    if b == 'b':
+                        break
+
                 msg = self.send(a['data'], a['dest'])
                 self.save_msg(a['name'], msg)
             elif a['action'] == self.RECV:
@@ -215,4 +221,5 @@ class Handler:
                 self.save_msg(a['name'], msg, src=addr)
             else:
                 print "unknow action", a['action']
+
 

@@ -12,7 +12,8 @@ def parseargs():
     parser.add_argument('--sport', help='source port for sending', type=int, default=0  )
     parser.add_argument('--sf',    help='scenario',                required='True')
     parser.add_argument('-d',      help='destination IP and port')     
-    parser.add_argument('--hp',    help='hide port if it is 5060', type=bool, default=False)
+    parser.add_argument('--hp',    help='hide port if it is 5060', action='store_true')
+    parser.add_argument('--step',  help='step through scenario',   action='store_true')
     return parser.parse_args()
 
 
@@ -86,6 +87,7 @@ def main(args):
     if args.d:
         g_context['remote'] = IPAddr.from_string(args.d)
     g_context['hidePort'] = args.hp
+    g_context['step'] = args.step
 
     
     loop = False

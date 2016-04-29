@@ -181,7 +181,7 @@ class Handler:
 
         msg_dst = addr.get_addr()
         if msg_dst[1] == 0:
-            msg_dst[1] = 5060
+            msg_dst = (msg_dst[0], 5060)
 
         print "sending to", msg_dst
         req = self.populate(data)
@@ -221,5 +221,22 @@ class Handler:
                 self.save_msg(a['name'], msg, src=addr)
             else:
                 print "unknow action", a['action']
+
+
+if __name__ == "__main__":
+    A =  [ 'fd99:2217:498e::15',
+            '[fd99:2217:498e::15]:5060',
+            '[fd99:2217:498e::15]',
+            '10.3.36.15',
+            '10.3.36.15:5060' ]
+    B = [False,True]
+
+    for i in range(0,2):
+        g_context['hidePort'] = B[i]
+        for adr in A:
+            ipadr = IPAddr.from_string(adr)
+            print "ip={0}\tport={1}\tversion={2}".format(ipadr.get_ip(), ipadr.get_port(), 
+                    ipadr.get_version())
+
 
 

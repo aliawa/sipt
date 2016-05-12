@@ -2,6 +2,7 @@ import re
 import argparse
 import sys
 from handler import *
+from enum import Enum
 
 
 
@@ -19,60 +20,94 @@ def parseargs():
 
 
 
+class STATE(Enum):
+    cmd, msg, bdy, done = range(4)
+
+
 # Formate is: (0)command (1)name (2)destination
-def readCommand(line):
+def readCommand(line,cmd):
     if line[0].isalpha():
         l = re.split('[^\w$.]+', line)
-        if l[0] == 'send':
-            return (Handler.SEND, l[1], l[2])
-        elif l[0] == 'recv':
-            return (Handler.RECV, l[1], '')
+        if l[0] in ['send','recv']:
+            for x in l:
+                cmd.append(x)
+            return STATE.msg, True
         else:
             print "ignoring unknown command", l[0]
 
-    return (Handler.NONE, Handler.NODST, '')
+    return STATE.cmd, True
+
+
+
+def readMsg(line, msg):
+    if line[0].isalpha():
+        return STATE.cmd, False
+    else:
+        data_line = line.strip()
+        if data_line:
+            msg.append(data_line)
+        else:
+            return STATE.bdy, True
         
+    return STATE.msg, True
+        
+
+def readBody(line, bdy):
+    if line[0].isalpha():
+        return STATE.done, False
+    else:
+        data_line = line.strip()
+        if data_line:
+            bdy.append(data_line)
+        else:
+            return STATE.done, False 
+        
+    return STATE.bdy, True
+
+
+def saveScenario(scenario, cmd, msg, bdy):
+    scenario.append({'name':cmd[1], 'action':cmd[0], 'dest':cmd[2], 
+        'msg':'\r\n'.join(msg),
+        'body':'\r\n'.join(bdy)})
+    return STATE.cmd, True
+
 
 def loadScenario(scen_name):
     scenario = []
-    data = []
-    cmd = (Handler.NONE, Handler.NODST)
+    msg = []
+    bdy = []
+    cmd = []
+    state = STATE.cmd
 
     try:
         f = file(scen_name, 'r')
-        for line in f:
-            if cmd[0] != Handler.NONE:
-                if line[0].isalpha():
-                    if len(data):
-                        data.append('\r\n')
-                        scenario.append({'name':cmd[1], 'action':cmd[0], 'dest':cmd[2], 
-                            'data':'\r\n'.join(data)})
-                        data = []
-                    cmd = readCommand(line.strip())
-                else:
-                    data_line = line.strip()
-                    if data_line:
-                        data.append(data_line)
-            else:
-                cmd = readCommand(line)
-
-        if cmd[0] != Handler.NONE: #and len(data):
-            data.append('\r\n')
-            scenario.append({
-                'name':cmd[1], 
-                'action':cmd[0], 
-                'dest':cmd[2], 
-                'data':'\r\n'.join(data)})
-
-        if len(scenario) == 0:
-            print "Bad scenario"
-            sys.exit(0)
-
-        return scenario
-
     except IOError as e:
         print "scenario is missing"
         sys.exit(0)
+
+    for line in f:
+        while True:
+            if state == STATE.cmd:
+                state, nxt = readCommand(line, cmd)
+            elif state == STATE.msg:
+                state, nxt = readMsg(line, msg)
+            elif state == STATE.bdy:
+                state, nxt = readBody(line, bdy)
+            elif state == STATE.done:
+                state, nxt = saveScenario(scenario, cmd, msg, bdy)
+                msg = []
+                bdy = []
+                cmd = []
+            if nxt:
+                break;
+    if state != STATE.cmd:
+        saveScenario(scenario, cmd, msg, bdy)
+
+    if len(scenario) == 0:
+        print "Bad scenario"
+        sys.exit(0)
+
+    return scenario
 
 
 
@@ -84,12 +119,20 @@ def main(args):
     ClientAddr = IPAddr(args.i, args.sport, ver)
     scenario = loadScenario(args.sf)
 
+
+#     for action in scenario:
+#         for key,val in action.items():
+#             print key
+#             print "-----"
+#             print val
+#         print
+
     if args.d:
         g_context['remote'] = IPAddr.from_string(args.d)
     g_context['hidePort'] = args.hp
     g_context['step'] = args.step
 
-    
+
     loop = False
     if scenario[0]['action'] == Handler.RECV:
         loop = True
@@ -106,3 +149,4 @@ def main(args):
 if __name__ == "__main__":
     main(parseargs())
 
+    

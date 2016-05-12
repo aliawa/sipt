@@ -78,6 +78,7 @@ class Handler:
         self.clnt_sock = self.getSock(clnt_addr.get_addr(), 
                 clnt_addr.get_version(), "UDP")
         self.tagval = str(random.randint(1111,9999))
+        self.media_ports = [random.randint(11111,11999)]
 
         print "Listning on : ", srvr_addr
         print "Sending from: ", clnt_addr
@@ -110,7 +111,7 @@ class Handler:
 
 
 
-    def getValue(self, var):
+    def getValue(self, var, env={}):
         var_seq = string.split(var, '.')
         if var_seq[0] == 'local':
             if var_seq[1] == 'ip':
@@ -119,6 +120,10 @@ class Handler:
                 return self.srvr_addr.get_port()
             elif var_seq[1] == 'addr':
                 return self.srvr_addr
+            elif var_seq[1] == 'ver':
+                return self.srvr_addr.get_version()
+            elif var_seq[1] == 'audioport':
+                return self.media_ports[0]
 
         elif var_seq[0] == 'server':
             if var_seq[1] == 'ip':
@@ -131,6 +136,9 @@ class Handler:
         elif var_seq[0] == 'tag':
             return self.tagval
 
+        elif var_seq[0] == 'len':
+            return env['len']
+            
         elif self.messages.has_key(var_seq[0]):
             if len(var_seq) == 2:
                 # The entire header
@@ -145,19 +153,26 @@ class Handler:
 
 
 
-    def populate(self, msg):
+    def populate(self, msg, env):
         msg_lst = re.split('\[|\]', msg)
         for i, item in enumerate(msg_lst):
-            if item[0] == '$':
-                msg_lst[i] = str(self.getValue(item[1:]))
+            if item and item[0] == '$':
+                msg_lst[i] = str(self.getValue(item[1:], env))
         return ''.join(msg_lst)
 
 
 
     def save_msg(self, name, msg, src=''):
         print "saving:", name
-        msg_lst = msg.split('\r\n')
+        msg_parts = msg.split('\r\n\r\n')
+        msg = msg_parts[0]
+        body = ''
         msg_dct = {}
+        if len(msg_parts) > 1:
+            body = msg_parts[1].strip()
+            msg_dct['body'] = body
+
+        msg_lst = msg.split('\r\n')
         msg_dct['first'] = msg_lst[0]
         for item in msg_lst[1:]:
             l = item.split(':',1)
@@ -171,7 +186,7 @@ class Handler:
 
 
 
-    def send(self, data, dest):
+    def send(self, data, body, dest):
         if dest == '': # dest not given -> use remote
             addr = self.getValue('server.addr')
         elif dest[0] == '$':
@@ -183,9 +198,18 @@ class Handler:
         if msg_dst[1] == 0:
             msg_dst = (msg_dst[0], 5060)
 
-        print "sending to", msg_dst
-        req = self.populate(data)
-        print req
+        print "\nsending to", msg_dst
+        env = {}
+        bdy = ''
+        if len(body):
+            bdy = self.populate(body, env)
+            env['len'] = len(bdy)
+
+        req = self.populate(data, env)
+        if len(bdy):
+            req = "{}\r\n\r\n{}".format(req, bdy)
+
+        print ("--->>>\n{}\n--->>>".format(req))
 
         self.clnt_sock.sendto(req, msg_dst);
         return req
@@ -194,15 +218,14 @@ class Handler:
 
     def recv(self, match):
         data, addr = self.srvr_sock.recvfrom(1024)
-        print "received from", addr, "\n", data
-        print
+        print ("\nreceived from:{}\n<<<---\n{}\n<<<---".format(addr, data.strip()))
         return data, addr;
 
 
 
     def execute(self):
         for a in self.scenario:
-            if a['action'] == self.SEND:
+            if a['action'] == 'send':
                 print "executing send:"
 
                 if g_context['step']:
@@ -210,13 +233,13 @@ class Handler:
                     if b == 'b':
                         break
 
-                msg = self.send(a['data'], a['dest'])
+                msg = self.send(a['msg'], a['body'], a['dest'])
                 self.save_msg(a['name'], msg)
-            elif a['action'] == self.RECV:
+            elif a['action'] == 'recv':
                 print "executing recv:"
                 dt = ''
-                if a.has_key('data'):
-                    dt = a['data']
+                if a.has_key('msg'):
+                    dt = a['msg']
                 msg, addr = self.recv(dt)
                 self.save_msg(a['name'], msg, src=addr)
             else:
